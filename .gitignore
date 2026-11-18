@@ -1,0 +1,9 @@
+node_modules/
+dist/
+desktop.ini
+
+# Material de trabajo privado: fotos originales, CV y referencias (no se publica)
+imgs/
+*.pdf
+FotoBelen*.png
+Foto_belen*.png

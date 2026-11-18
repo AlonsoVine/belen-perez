@@ -1,0 +1,20 @@
+// Prueba de la galería: node tools/galtest.mjs <carpeta>
+import { chromium } from 'playwright';
+import fs from 'node:fs';
+const out = process.argv[2]; fs.mkdirSync(out, { recursive: true });
+const b = await chromium.launch({ args: ['--enable-gpu', '--use-angle=d3d11', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+p.on('pageerror', (e) => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
+await p.waitForSelector('#enter-silent:not([disabled])', { timeout: 90000 });
+await p.click('#enter-silent'); await p.waitForTimeout(2000);
+const y = await p.evaluate(() => { const el = document.getElementById('gallery-open'); return el.getBoundingClientRect().top + scrollY - 200; });
+await p.evaluate((y) => window.__bp.lenis.scrollTo(y, { immediate: true, force: true }), y);
+await p.waitForTimeout(1500); await p.screenshot({ path: out + '/1-strip.png' });
+await p.click('#gallery-open'); await p.waitForTimeout(1500); await p.screenshot({ path: out + '/2-mosaic.png' });
+await p.click('.tile[data-i="3"]'); await p.waitForTimeout(1200); await p.screenshot({ path: out + '/3-viewer.png' });
+await p.keyboard.press('ArrowRight'); await p.waitForTimeout(800); await p.screenshot({ path: out + '/4-next.png' });
+await p.keyboard.press('Escape'); await p.waitForTimeout(600); await p.keyboard.press('Escape'); await p.waitForTimeout(800);
+await p.screenshot({ path: out + '/5-closed.png' });
+await p.setViewportSize({ width: 390, height: 844 }); await p.click('#gallery-open').catch(() => {}); await p.waitForTimeout(1500); await p.screenshot({ path: out + '/6-mobile.png' });
+await b.close();
