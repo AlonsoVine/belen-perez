@@ -2,7 +2,7 @@
 
 Web portfolio de la violinista Belén Pérez Mora: un recorrido con scroll por el interior de su violín en 3D, trayectoria, proyecto propio, repertorio, galería y contrataciones.
 
-**Web desplegada:** https://alonsovine.github.io/belen-perez/
+**No está publicada:** se ve solo en local con `npm run dev`.
 
 ## Desarrollo en local
 
@@ -12,6 +12,6 @@ npm run dev      # http://localhost:5173
 npm run build    # versión final en dist/
 ```
 
-Cada cambio que se sube a la rama `main` se publica solo en GitHub Pages (`.github/workflows/deploy.yml`).
+Si algún día se quiere publicar, `.github/workflows/deploy.yml` la despliega en GitHub Pages ejecutándolo a mano desde la pestaña Actions (hay que activar Pages en el repositorio).
 
 Hecho con Vite, Three.js, GSAP y Lenis.
