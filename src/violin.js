@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import VD from './violin-data.json';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { mapleTexture, rawWoodTexture, ebonyTexture, labelTexture, bridgeTexture, windingNormal, fwallTexture } from './textures.js';
+import { ebonyTexture, labelTexture, windingNormal, fwallTexture } from './textures.js';
+// (la madera cruda y el puente son procedurales pero caros: se hornean en public/tex con tools/bake-procedural.mjs)
 
 // ─────────────────────────────────────────────────────────────────────────
 //  El violín de Belén, reconstruido a partir de sus fotografías.
@@ -22,6 +23,9 @@ export const DIM = {
   fbEndY: 0.42,
 };
 
+// Con ?bake (sólo en desarrollo) se parte de las fotos en bruto (tools/raw) y se generan la máscara de las efes y la
+// tapa con el filo corregido; tools/bake-top.mjs las guarda en public/tex. En producción se cargan ya horneadas.
+const BAKE = import.meta.env.DEV && new URLSearchParams(location.search).has('bake');
 export const manager = new THREE.LoadingManager();
 export const texturesReady = new Promise((res) => { manager.onLoad = res; manager.onError = res; });
 const loader = new THREE.TextureLoader(manager);
@@ -212,23 +216,24 @@ function curvedLabel(cx, cy, w, h, offset) {
 export function buildViolin(renderer) {
   const aniso = renderer.capabilities.getMaxAnisotropy();
   const T = {
-    top: photo('/tex/top.jpg'), topN: photo('/tex/top-n.jpg', false),
-    topMask: photo('/tex/top-mask.png', false), holes: photo('/tex/top-holes.png', false),
-    back: photo('/tex/back.jpg'), backN: photo('/tex/back-n.jpg', false),
-    scroll: photo('/tex/scroll.jpg'), scrollN: photo('/tex/scroll-n.jpg', false),
-    rib: photo('/tex/rib.jpg'), ribN: photo('/tex/rib-n.jpg', false),
-    neck: photo('/tex/neck.jpg'), neckN: photo('/tex/neck-n.jpg', false),
-    raw: rawWoodTexture(), ebony: ebonyTexture(),
+    top: photo(BAKE ? '/tools/raw/top.jpg' : '/tex/top.webp'), topN: photo('/tex/top-n.webp', false),
+    topMask: photo(BAKE ? '/tools/raw/top-mask.png' : '/tex/top-alpha.png', false), holes: photo('/tex/top-holes.png', false),
+    back: photo('/tex/back.webp'), backN: photo('/tex/back-n.webp', false),
+    scroll: photo('/tex/scroll.webp'), scrollN: photo('/tex/scroll-n.webp', false),
+    rib: photo('/tex/rib.webp'), ribN: photo('/tex/rib-n.webp', false),
+    neck: photo('/tex/neck.webp'), neckN: photo('/tex/neck-n.webp', false),
+    raw: photo('/tex/raw.webp'), ebony: ebonyTexture(),
   };
   Object.values(T).forEach((t) => (t.anisotropy = aniso));
   for (const k of ['rib', 'ribN']) { T[k].wrapS = T[k].wrapT = THREE.MirroredRepeatWrapping; }
   for (const k of ['neck', 'neckN']) T[k].wrapS = T[k].wrapT = THREE.ClampToEdgeWrapping;
+  T.raw.wrapS = T.raw.wrapT = THREE.RepeatWrapping;
   T.raw.repeat.set(2, 5);
   // interior: abeto oscuro real (franja de foto), a escala (~62 × 47 mm por tesela)
-  T.inner = photo('/tex/inner.jpg'); T.innerN = photo('/tex/inner-n.jpg', false);
+  T.inner = photo('/tex/inner.webp'); T.innerN = photo('/tex/inner-n.webp', false);
   for (const k of ['inner', 'innerN']) { T[k].wrapS = T[k].wrapT = THREE.MirroredRepeatWrapping; T[k].repeat.set(3.4, 7.6); }
   T.innerObj = T.inner.clone(); T.innerObj.repeat.set(1.5, 3); T.innerObj.needsUpdate = true;
-  T.bridge = bridgeTexture(); T.bridge.repeat.set(1, 1);
+  T.bridge = photo('/tex/bridge.webp'); T.bridge.wrapS = T.bridge.wrapT = THREE.RepeatWrapping; T.bridge.repeat.set(1, 1);
   T.wind = windingNormal();
   T.fwall = fwallTexture(); T.fwall.wrapT = THREE.ClampToEdgeWrapping;
 
@@ -305,7 +310,8 @@ export function buildViolin(renderer) {
     });
     f.loop = S;
   }
-  {
+  if (BAKE) {
+    const baked = (window.__bake = {});
     const img0 = T.topMask.image;
     const build = (img) => {
       const W = img.width, H = img.height;
@@ -326,6 +332,7 @@ export function buildViolin(renderer) {
       }
       const t = new THREE.CanvasTexture(cv); t.anisotropy = 8; t.flipY = T.topMask.flipY;
       M.top.alphaMap = t; M.innerTop.alphaMap = t; M.top.needsUpdate = true; M.innerTop.needsUpdate = true;
+      baked.alpha = cv;
     };
     if (img0 && img0.width) build(img0); else T.topMask.onUpdate = () => { T.topMask.onUpdate = null; build(T.topMask.image); };
 
@@ -399,6 +406,7 @@ export function buildViolin(renderer) {
       t.colorSpace = T.top.colorSpace; t.flipY = T.top.flipY; t.anisotropy = 8;
       t.wrapS = T.top.wrapS; t.wrapT = T.top.wrapT;
       M.top.map = t; M.top.needsUpdate = true;
+      baked.top = cv;
     };
     if (T.top.image && T.top.image.width) paintEdge(T.top.image); else T.top.onUpdate = () => { T.top.onUpdate = null; paintEdge(T.top.image); };
   }

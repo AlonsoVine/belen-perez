@@ -27,7 +27,7 @@ export function initGallery({ photos, lenis, openButtons = [], strip }) {
   const viewer = root.querySelector('.viewer');
   const vImg = viewer.querySelector('.viewer__img');
   const vCount = viewer.querySelector('.viewer__count');
-  grid.innerHTML = photos.map((p, i) => `<button class="tile" type="button" data-i="${i}" aria-label="Ver foto ${i + 1}: ${p.alt}"><img src="${p.src}" alt="${p.alt}" loading="lazy" decoding="async"/></button>`).join('');
+  grid.innerHTML = photos.map((p, i) => `<button class="tile" type="button" data-i="${i}" aria-label="Ver foto ${i + 1}: ${p.alt}"><img src="${p.src}" srcset="${p.thumb} ${p.tw}w, ${p.src} ${p.w}w" sizes="(max-width: 700px) 50vw, 33vw" width="${p.w}" height="${p.h}" alt="${p.alt}" loading="lazy" decoding="async"/></button>`).join('');
   const tiles = [...grid.children];
 
   // ── mosaico justificado: filas que llenan el ancho exacto; la altura se ajusta

@@ -103,22 +103,26 @@ export const booking = {
 
 // Galería (las fotos de concierto llevan la marca de la FSO)
 export const gallery = [
-  { src: '/img/galeria/retrato-violin.jpg', alt: 'Belén Pérez sosteniendo su violín, retrato de estudio', w: 1066, h: 1600 },
-  { src: '/img/galeria/fso-escena-ambar.jpg', alt: 'Belén Pérez tocando con la Film Symphony Orchestra', w: 1600, h: 1066 },
-  { src: '/img/galeria/retrato-luz.jpg', alt: 'Retrato de Belén Pérez con el violín, luz lateral', w: 1066, h: 1600 },
-  { src: '/img/galeria/fso-escena-azul.jpg', alt: 'Belén Pérez en concierto con la orquesta, luz azul', w: 1600, h: 1066 },
-  { src: '/img/galeria/ensayo-bn.jpg', alt: 'Belén Pérez leyendo partitura en un ensayo, en blanco y negro', w: 1202, h: 1600 },
-  { src: '/img/galeria/retrato-mirada.jpg', alt: 'Retrato frontal de Belén Pérez', w: 1066, h: 1600 },
-  { src: '/img/galeria/fso-escena-naranja.jpg', alt: 'Belén Pérez con la Film Symphony Orchestra, focos naranjas', w: 1600, h: 1066 },
-  { src: '/img/galeria/perfil-concierto.jpg', alt: 'Belén Pérez de perfil tocando en penumbra', w: 493, h: 493 },
-  { src: '/img/galeria/fso-escena-violeta.jpg', alt: 'Belén Pérez tocando en concierto, luz violeta', w: 1600, h: 1066 },
-  { src: '/img/galeria/retrato-sentada.jpg', alt: 'Belén Pérez sentada con su violín', w: 1066, h: 1600 },
-  { src: '/img/galeria/backstage.jpg', alt: 'Belén Pérez riendo entre bastidores con otros músicos', w: 1600, h: 1066 },
-  { src: '/img/galeria/retrato-perfil.jpg', alt: 'Belén Pérez mirando a un lado con violín y arco', w: 551, h: 740 },
-  { src: '/img/galeria/solista-sala.jpg', alt: 'Belén Pérez tocando de pie en una sala', w: 1600, h: 1066 },
-  { src: '/img/galeria/retrato-sonrisa.jpg', alt: 'Belén Pérez con su violín, retrato luminoso', w: 1066, h: 1600 },
-  { src: '/img/galeria/rodaje.jpg', alt: 'Monitor de rodaje con Belén Pérez tocando', w: 1440, h: 1440 },
+  { src: '/img/galeria/retrato-violin.webp', alt: 'Belén Pérez sosteniendo su violín, retrato de estudio', w: 1066, h: 1600 },
+  { src: '/img/galeria/fso-escena-ambar.webp', alt: 'Belén Pérez tocando con la Film Symphony Orchestra', w: 1600, h: 1066 },
+  { src: '/img/galeria/retrato-luz.webp', alt: 'Retrato de Belén Pérez con el violín, luz lateral', w: 1066, h: 1600 },
+  { src: '/img/galeria/fso-escena-azul.webp', alt: 'Belén Pérez en concierto con la orquesta, luz azul', w: 1600, h: 1066 },
+  { src: '/img/galeria/ensayo-bn.webp', alt: 'Belén Pérez leyendo partitura en un ensayo, en blanco y negro', w: 1202, h: 1600 },
+  { src: '/img/galeria/retrato-mirada.webp', alt: 'Retrato frontal de Belén Pérez', w: 1066, h: 1600 },
+  { src: '/img/galeria/fso-escena-naranja.webp', alt: 'Belén Pérez con la Film Symphony Orchestra, focos naranjas', w: 1600, h: 1066 },
+  { src: '/img/galeria/perfil-concierto.webp', alt: 'Belén Pérez de perfil tocando en penumbra', w: 493, h: 493 },
+  { src: '/img/galeria/fso-escena-violeta.webp', alt: 'Belén Pérez tocando en concierto, luz violeta', w: 1600, h: 1066 },
+  { src: '/img/galeria/retrato-sentada.webp', alt: 'Belén Pérez sentada con su violín', w: 1066, h: 1600 },
+  { src: '/img/galeria/backstage.webp', alt: 'Belén Pérez riendo entre bastidores con otros músicos', w: 1600, h: 1066 },
+  { src: '/img/galeria/retrato-perfil.webp', alt: 'Belén Pérez mirando a un lado con violín y arco', w: 551, h: 740 },
+  { src: '/img/galeria/solista-sala.webp', alt: 'Belén Pérez tocando de pie en una sala', w: 1600, h: 1066 },
+  { src: '/img/galeria/retrato-sonrisa.webp', alt: 'Belén Pérez con su violín, retrato luminoso', w: 1066, h: 1600 },
+  { src: '/img/galeria/rodaje.webp', alt: 'Monitor de rodaje con Belén Pérez tocando', w: 1440, h: 1440 },
 ];
 
 // rutas relativas a la base del sitio (local y GitHub Pages)
-gallery.forEach((g) => { g.src = import.meta.env.BASE_URL + g.src.replace(/^\//, ''); });
+gallery.forEach((g) => {
+  g.src = import.meta.env.BASE_URL + g.src.replace(/^\//, '');
+  // miniatura al 60 % (tools/optimize-assets.py): la tira y el mosaico usan srcset; el visor, la foto completa
+  g.thumb = g.src.replace('.webp', '-s.webp'); g.tw = Math.round(g.w * 0.6);
+});

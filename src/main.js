@@ -48,7 +48,7 @@ function renderContent() {
 
   const shots = gallery.map((g, i) => {
     const r = g.w / g.h, w = `calc(62vh * ${r.toFixed(3)})`;
-    return `<figure class="shot" style="width:${w}" data-i="${i}" data-cursor="Ampliar"><img src="${g.src}" alt="${g.alt}" loading="lazy" decoding="async"/><figcaption class="mono">${String(i + 1).padStart(2, '0')} / ${gallery.length}</figcaption></figure>`;
+    return `<figure class="shot" style="width:${w}" data-i="${i}" data-cursor="Ampliar"><img src="${g.src}" srcset="${g.thumb} ${g.tw}w, ${g.src} ${g.w}w" sizes="calc(${(r * 62 * 1.12).toFixed(2)}vh)" width="${g.w}" height="${g.h}" alt="${g.alt}" loading="lazy" decoding="async"/><figcaption class="mono">${String(i + 1).padStart(2, '0')} / ${gallery.length}</figcaption></figure>`;
   });
   // la tira se duplica para que el desfile automático dé la vuelta sin cortes (la copia es decorativa)
   $('#gallery-track').innerHTML = shots.join('') + shots.map((s) => s.replace('<figure class="shot"', '<figure class="shot" aria-hidden="true"').replace(/alt="[^"]*"/, 'alt=""')).join('');
@@ -115,7 +115,7 @@ function loader() {
   ]);
   gsap.to(state, { p: 0.85, duration: 1.6, ease: 'power2.out', onUpdate: () => (pct.textContent = String(Math.round(state.p * 100)).padStart(3, '0')) });
   ready.then(() => {
-    if (stage) stage.renderer.compile(stage.scene, stage.camera);
+    if (stage) stage.warmup();
     gsap.to(state, {
       p: 1, amp: 6, duration: 0.9, ease: 'power3.out',
       onUpdate: () => (pct.textContent = String(Math.round(state.p * 100)).padStart(3, '0')),
@@ -134,6 +134,7 @@ function loader() {
     document.body.classList.remove('is-loading');
     lenis.start();
     intro();
+    setTimeout(() => stage?.startAdaptive(), 5000);
   };
   $('#enter').addEventListener('click', () => go(true));
   $('#enter-silent').addEventListener('click', () => go(false));
@@ -242,17 +243,29 @@ function reveals() {
     strip.addEventListener('pointerenter', hold); strip.addEventListener('pointerleave', go);
     strip.addEventListener('focusin', hold); strip.addEventListener('focusout', go);
     new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(strip);
+    // la medida se guarda y sólo se recalcula al cambiar el tamaño (leer offsetLeft en cada fotograma fuerza layout)
+    let half = 1;
+    const measureHalf = () => { half = track.children[gallery.length]?.offsetLeft || track.scrollWidth / 2 || 1; };
+    measureHalf();
+    ScrollTrigger.addEventListener('refresh', measureHalf);
+    addEventListener('resize', measureHalf);
+    let lastX = NaN;
     gsap.ticker.add((_, dtMs) => {
       if (!visible) return;
       const dt = Math.min(dtMs, 50) / 1000;
       v += (target - v) * (1 - Math.exp(-dt * 3));
-      const half = track.children[gallery.length]?.offsetLeft || track.scrollWidth / 2;
       x = (x + v * dt) % half;
+      if (Math.abs(x - lastX) < 0.01) return; // quieta (ratón encima): no se escribe nada
+      lastX = x;
       track.style.transform = `translate3d(${-x}px,0,0)`;
     });
   }
   initGallery({ photos: gallery, lenis, openButtons: [$('#gallery-open')], strip: $('#gallery') });
-  $$('.shot img').forEach((img) => gsap.to(img, { xPercent: 3, ease: 'none', scrollTrigger: { trigger: '#gallery', start: 'top bottom', end: 'bottom top', scrub: true } }));
+  // paralaje suave de las fotos: un solo ScrollTrigger y una variable CSS (antes eran 30, uno por foto)
+  ScrollTrigger.create({
+    trigger: '#gallery', start: 'top bottom', end: 'bottom top',
+    onUpdate: (self) => track.style.setProperty('--gx', (self.progress * 3).toFixed(3)),
+  });
 
   // VII · contacto
   gsap.from('.format', { opacity: 0, y: 40, stagger: 0.1, duration: 1.2, ease: 'expo.out', scrollTrigger: { trigger: '#formats', start: 'top 85%' } });
@@ -334,14 +347,17 @@ function playableStrings() {
   let lastY = null;
   const pluck = (i, x, strength) => {
     const s = springs[i];
-    s.x = x; s.v += strength * 22;
+    s.x = x; s.v += strength * 22; hot = true;
     const note = $$('.lane')[i].dataset.note;
     sound.pluck(note, Math.min(1, 0.35 + strength));
     stage?.pluck(3 - i, Math.min(1, 0.4 + strength));
   };
+  let near = false; // sólo se buscan cruces de cuerda mientras la sección está en pantalla
+  new IntersectionObserver(([e]) => { near = e.isIntersecting; }).observe($('#strings'));
+  let hot = false;
   addEventListener('pointermove', (e) => {
     const y = e.clientY;
-    if (lastY !== null) {
+    if (near && lastY !== null) {
       lanes.forEach((el, i) => {
         const r = el.getBoundingClientRect();
         if (r.width < 10 || e.clientX < r.left || e.clientX > r.right) return;
@@ -360,9 +376,13 @@ function playableStrings() {
   }));
   const paths = lanes.map((el) => $('path', el));
   gsap.ticker.add(() => {
+    if (!hot) return;
+    hot = false;
     springs.forEach((s, i) => {
+      if (!s.y && !s.v) return;
       s.v += -s.y * 0.35; s.v *= 0.9; s.y += s.v;
       if (Math.abs(s.y) < 0.01 && Math.abs(s.v) < 0.01) { s.y = 0; s.v = 0; }
+      else hot = true;
       paths[i].setAttribute('d', `M0 20 Q${s.x} ${20 + s.y * 2} 1000 20`);
     });
   });
@@ -375,6 +395,8 @@ function cursor() {
   const p = { x: innerWidth / 2, y: innerHeight / 2 }, r = { ...p };
   addEventListener('pointermove', (e) => { p.x = e.clientX; p.y = e.clientY; });
   gsap.ticker.add(() => {
+    if (Math.abs(p.x - r.x) < 0.02 && Math.abs(p.y - r.y) < 0.02 && r.done) return;
+    r.done = Math.abs(p.x - r.x) < 0.02 && Math.abs(p.y - r.y) < 0.02;
     r.x += (p.x - r.x) * 0.16; r.y += (p.y - r.y) * 0.16;
     dot.style.transform = `translate(${p.x}px,${p.y}px)`;
     ring.style.transform = `translate(${r.x}px,${r.y}px)`;

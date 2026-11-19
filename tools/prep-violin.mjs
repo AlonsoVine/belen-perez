@@ -1,5 +1,7 @@
 // Procesa las fotos del violín real de Belén → texturas + contorno + máscara de efes.
 // node tools/prep-violin.mjs
+// Después: python tools/clean-pegs.py (opcional) -> node tools/bake-top.mjs (con vite en :5173) -> python tools/optimize-assets.py
+// (este script escribe JPG/PNG; optimize-assets.py los convierte a los .webp que carga la web)
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 
@@ -13,6 +15,7 @@ const imgs = {
   efes: 'data:image/png;base64,' + fs.readFileSync('imgs/efes.png').toString('base64'),
 };
 fs.mkdirSync('public/tex', { recursive: true });
+fs.mkdirSync('tools/raw', { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -527,7 +530,7 @@ const result = await page.evaluate(async (imgs) => {
 }, imgs);
 
 const save = (name, url) => fs.writeFileSync(name, Buffer.from(url.split(',')[1], 'base64'));
-save('public/tex/top.jpg', result.front);
+save('tools/raw/top.jpg', result.front); // en bruto: tools/bake-top.mjs genera public/tex/top.webp
 save('public/tex/top-n.jpg', result.frontN);
 save('public/tex/back-n.jpg', result.backN);
 save('public/tex/scroll-n.jpg', result.scrollN);
@@ -537,7 +540,7 @@ save('public/tex/inner-n.jpg', result.innerN);
 save('public/tex/rib-n.jpg', result.ribN);
 save('public/tex/neck.jpg', result.neck);
 save('public/tex/neck-n.jpg', result.neckN);
-save('public/tex/top-mask.png', result.frontMask);
+save('tools/raw/top-mask.png', result.frontMask); // en bruto: bake-top genera public/tex/top-alpha.png
 save('public/tex/top-holes.png', result.holes);
 save('public/tex/back.jpg', result.backPadded);
 save('public/tex/scroll.jpg', result.scrollPadded);
