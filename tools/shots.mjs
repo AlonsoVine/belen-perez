@@ -9,6 +9,7 @@ const views = [
   ['inside-mid', 'inside', 0.36], ['inside-label', 'inside', 0.72], ['strings', 'strings', 0.5],
   ['project', 'project', 0.5], ['gallery', 'listen', 0.95], ['contact', 'contact', 0.4], ['coda', 'coda-space', 0.55],
 ];
+const only = process.argv[4] ? process.argv[4].split(',') : null;
 const browser = await chromium.launch({ args: ['--enable-gpu', '--use-angle=d3d11', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
@@ -17,6 +18,7 @@ await page.waitForSelector('#enter-silent:not([disabled])', { timeout: 120000 })
 await page.click('#enter-silent');
 await page.waitForTimeout(5000);
 for (const [name, id, f] of views) {
+  if (only && !only.includes(name)) continue;
   const y = await page.evaluate(([id, f]) => {
     const el = document.getElementById(id);
     return el.getBoundingClientRect().top + window.scrollY + f * Math.max(el.offsetHeight - innerHeight, 0);

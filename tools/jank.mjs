@@ -34,6 +34,7 @@ async function once() {
   const loaderDone = await page.evaluate(() => performance.now());
   const wallLoader = Date.now() - t0;
   const ltLoad = await page.evaluate(() => window.__lt.slice());
+  if (process.env.JANK_STARTUP) { await browser.close(); return { loaderDoneMs: Math.round(loaderDone), wallLoaderMs: wallLoader, ltLoad: { count: ltLoad.length, totalMs: Math.round(ltLoad.reduce((a, e) => a + e[1], 0)), maxMs: Math.round(Math.max(0, ...ltLoad.map((e) => e[1]))) } }; }
   await page.click('#enter-silent');
   await page.waitForTimeout(4500);
   const limit = await page.evaluate(() => window.__bp.lenis.limit);
@@ -79,6 +80,7 @@ for (let r = 0; r < runs; r++) {
   const res = await once();
   results.push(res);
   console.log(`--- run ${r + 1}`);
+  if (res.ltLoad && !res.scroll) { console.log('startup', JSON.stringify(res)); continue; }
   console.log(`programs ${res.programs} | loader done ${res.loaderDoneMs}ms | longtasks load ${JSON.stringify(res.ltLoad)} | scroll ${JSON.stringify(res.ltScroll)}`);
   console.log('hitches>60ms', res.worst.join(' '));
   console.log('scroll', JSON.stringify(res.scroll));

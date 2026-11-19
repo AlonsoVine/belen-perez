@@ -245,18 +245,21 @@ export class Stage {
   // Precalienta todo antes de mostrar la web: compila los programas de ambos estados de la luz interior,
   // sube geometrías y texturas a la GPU y reserva los mapas de sombra, para que durante el scroll no haya
   // ningún tirón por compilación o subida. Se dibuja una vez sin recorte por frustum.
-  warmup() {
+  async warmup() {
     const meshes = [];
     this.scene.traverse((o) => { if (o.frustumCulled) { meshes.push(o); o.frustumCulled = false; } });
     const was = this.fLight.castShadow;
+    this.warming = true; // render() no toca castShadow mientras se precalientan los dos estados
     for (const cast of [false, true, was]) {
       this.fLight.castShadow = cast;
       this.key.shadow.needsUpdate = this.fLight.shadow.needsUpdate = true;
-      this.renderer.compile(this.scene, this.camera);
+      // compileAsync usa KHR_parallel_shader_compile: la GPU compila en paralelo sin congelar el hilo principal (el loader sigue animado)
+      await this.renderer.compileAsync(this.scene, this.camera).catch(() => this.renderer.compile(this.scene, this.camera));
       this.composer.render(0.016);
     }
     meshes.forEach((o) => (o.frustumCulled = true));
     this.fLight.castShadow = was;
+    this.warming = false;
     this.shadowPend = { key: true, f: true };
   }
 
@@ -445,7 +448,7 @@ export class Stage {
     if (this.v.labelMat) this.v.labelMat.color.copy(this.v.labelBase).multiplyScalar(0.35 + 0.65 * this.insideK);
     // con histéresis; los dos estados (con y sin sombra) se precompilan en warmup(), así que el cambio no recompila nada
     const wantShadow = this.insideK > (this.fLight.castShadow ? 0.03 : 0.05);
-    if (wantShadow !== this.fLight.castShadow) this.fLight.castShadow = wantShadow;
+    if (!this.warming && wantShadow !== this.fLight.castShadow) this.fLight.castShadow = wantShadow;
     this.v.beams.forEach((b) => { b.material.uniforms.uIntensity.value = 0.12 + this.insideK * 0.55; b.material.uniforms.uTime.value = time; });
     this.v.lightSheet.material.opacity = 0.08 + 0.1 * this.insideK;
     this.scene.fog.density = inside ? 0.0 : 0.035;

@@ -114,8 +114,8 @@ function loader() {
     new Promise((r) => setTimeout(r, 1600)),
   ]);
   gsap.to(state, { p: 0.85, duration: 1.6, ease: 'power2.out', onUpdate: () => (pct.textContent = String(Math.round(state.p * 100)).padStart(3, '0')) });
-  ready.then(() => {
-    if (stage) stage.warmup();
+  ready.then(async () => {
+    if (stage) await stage.warmup();
     gsap.to(state, {
       p: 1, amp: 6, duration: 0.9, ease: 'power3.out',
       onUpdate: () => (pct.textContent = String(Math.round(state.p * 100)).padStart(3, '0')),
