@@ -90,7 +90,11 @@ export class Stage {
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.mobile = window.matchMedia('(max-width: 820px)').matches;
     const r = (this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }));
-    r.setPixelRatio(Math.min(window.devicePixelRatio, this.mobile ? 1.5 : 1.75));
+    // resolución adaptable: arranca en el máximo y baja sólo si los fotogramas van lentos de forma sostenida
+    this.dprMax = Math.min(window.devicePixelRatio, this.mobile ? 1.5 : 1.75);
+    this.dprMin = Math.min(this.dprMax, 1);
+    this.dpr = this.dprMax;
+    r.setPixelRatio(this.dpr);
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.05;
     r.outputColorSpace = THREE.SRGBColorSpace;
@@ -116,7 +120,7 @@ export class Stage {
     v.bow.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.buildDust();
 
-    this.composer = new EffectComposer(r, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+    this.composer = new EffectComposer(r, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: this.dprMax >= 1.5 ? 2 : 4 }));
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.25, 0.4, 0.9);
     this.composer.addPass(this.bloom);
@@ -135,6 +139,7 @@ export class Stage {
     this.clock = new THREE.Timer();
     this.bowPhase = 0;
     this.intro = 0; // 0..1 entrada inicial
+    this.shadowPend = { key: true, f: true };
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -148,6 +153,7 @@ export class Stage {
     this.key.shadow.mapSize.set(2048, 2048);
     this.key.shadow.camera.near = 4; this.key.shadow.camera.far = 18;
     this.key.shadow.bias = -0.0002; this.key.shadow.normalBias = 0.012; this.key.shadow.radius = 3;
+    this.key.shadow.autoUpdate = false; // las sombras sólo se redibujan cuando algo se mueve (ver updateShadows)
     s.add(this.key, this.key.target);
     this.rim = new THREE.DirectionalLight('#aebbd6', 1.7);
     this.rim.position.set(-6, 3, -5);
@@ -166,6 +172,7 @@ export class Stage {
     this.fLight.shadow.mapSize.set(2048, 2048);
     this.fLight.shadow.camera.near = 1.2; this.fLight.shadow.camera.far = 4;
     this.fLight.shadow.bias = -0.0004; this.fLight.shadow.normalBias = 0.004; this.fLight.shadow.radius = 2;
+    this.fLight.shadow.autoUpdate = false;
     s.add(this.fLight, this.fLight.target);
   }
 
@@ -235,6 +242,65 @@ export class Stage {
 
   setScroll(y) { this.scrollY = y; }
 
+  // Precalienta todo antes de mostrar la web: compila los programas de ambos estados de la luz interior,
+  // sube geometrías y texturas a la GPU y reserva los mapas de sombra, para que durante el scroll no haya
+  // ningún tirón por compilación o subida. Se dibuja una vez sin recorte por frustum.
+  warmup() {
+    const meshes = [];
+    this.scene.traverse((o) => { if (o.frustumCulled) { meshes.push(o); o.frustumCulled = false; } });
+    const was = this.fLight.castShadow;
+    for (const cast of [false, true, was]) {
+      this.fLight.castShadow = cast;
+      this.key.shadow.needsUpdate = this.fLight.shadow.needsUpdate = true;
+      this.renderer.compile(this.scene, this.camera);
+      this.composer.render(0.016);
+    }
+    meshes.forEach((o) => (o.frustumCulled = true));
+    this.fLight.castShadow = was;
+    this.shadowPend = { key: true, f: true };
+  }
+
+  // Las sombras (2 mapas de 2048) son lo más caro del fotograma. El violín y el arco se mueven muy despacio,
+  // así que se redibujan sólo si cambió la pose (la sombra de la luz interior, sólo cuando está activa) y la
+  // de la luz principal a la mitad de cadencia: la diferencia es de décimas de milímetro.
+  updateShadows(vg, bow) {
+    const P = this.pose ?? (this.pose = new Float32Array(8));
+    const q = bow.quaternion, bp = bow.position;
+    const cur = [vg.rotation.x, vg.rotation.y, vg.position.y, bow.visible ? bp.x : 99, bp.y, bp.z, q.x + q.y + q.z, q.w];
+    let moved = false;
+    for (let k = 0; k < 8; k++) if (Math.abs(cur[k] - P[k]) > 2e-4) { moved = true; break; }
+    if (moved) { P.set(cur); this.shadowPend.key = this.shadowPend.f = true; }
+    this.frameNo = (this.frameNo ?? 0) + 1;
+    if (this.shadowPend.key && this.frameNo % 2 === 0) { this.key.shadow.needsUpdate = true; this.shadowPend.key = false; }
+    if (this.shadowPend.f && this.fLight.castShadow) { this.fLight.shadow.needsUpdate = true; this.shadowPend.f = false; }
+  }
+
+  startAdaptive() { this.adaptOn = true; this.ad = null; }
+
+  // Resolución adaptable con histéresis (nunca por debajo de 1 en escritorio)
+  adapt(raw) {
+    if (!this.adaptOn || raw > 0.25) return; // parones puntuales (pestaña oculta, carga) no cuentan
+    const A = this.ad ?? (this.ad = { ema: 1 / 60, slow: 0, fast: 0, since: 0, drops: 0, lock: false, lastUp: -99 });
+    A.ema += (raw - A.ema) * 0.05; A.since += raw;
+    if (A.ema > 0.024) { A.slow += raw; A.fast = 0; } else { A.slow = Math.max(0, A.slow - raw); A.fast = A.ema < 0.0175 ? A.fast + raw : 0; }
+    if (A.slow > 1.5 && this.dpr > this.dprMin + 0.01 && A.since > 3) {
+      this.setDpr(Math.max(this.dprMin, this.dpr * 0.88));
+      if (A.since - A.lastUp < 20) A.lock = true; // bajó justo tras subir: no volver a subir
+      A.slow = 0; A.since = 0; A.drops++;
+    } else if (A.fast > 8 && !A.lock && this.dpr < this.dprMax - 0.01 && A.since > 12) {
+      this.setDpr(Math.min(this.dprMax, this.dpr * 1.1));
+      A.fast = 0; A.since = 0; A.lastUp = 0;
+    }
+  }
+
+  setDpr(pr) {
+    this.dpr = pr;
+    this.renderer.setPixelRatio(pr);
+    this.composer.setPixelRatio(pr);
+    this.dustMat.uniforms.uPx.value = pr;
+    this.resize();
+  }
+
   // Devuelve {i, t} del tramo actual
   segment(y) {
     const S = this.stopsS;
@@ -288,7 +354,9 @@ export class Stage {
 
   render() {
     this.clock.update();
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const rawDt = this.clock.getDelta();
+    this.adapt(rawDt);
+    const dt = Math.min(rawDt, 0.05);
     const time = this.clock.getElapsed();
     // el scroll se suaviza antes de mover la cámara (la rueda del ratón llega a saltos);
     // dentro del violín, donde cada píxel de scroll mueve mucho la vista, se suaviza más
@@ -375,7 +443,9 @@ export class Stage {
     this.fLight.intensity = (1.2 + 5.8 * this.insideK) * this.nearF;
     this.final.uniforms.uAberr.value = (i >= 2 && i <= 10) ? 0 : 0.0004;
     if (this.v.labelMat) this.v.labelMat.color.copy(this.v.labelBase).multiplyScalar(0.35 + 0.65 * this.insideK);
-    this.fLight.castShadow = this.insideK > 0.05;
+    // con histéresis; los dos estados (con y sin sombra) se precompilan en warmup(), así que el cambio no recompila nada
+    const wantShadow = this.insideK > (this.fLight.castShadow ? 0.03 : 0.05);
+    if (wantShadow !== this.fLight.castShadow) this.fLight.castShadow = wantShadow;
     this.v.beams.forEach((b) => { b.material.uniforms.uIntensity.value = 0.12 + this.insideK * 0.55; b.material.uniforms.uTime.value = time; });
     this.v.lightSheet.material.opacity = 0.08 + 0.1 * this.insideK;
     this.scene.fog.density = inside ? 0.0 : 0.035;
@@ -385,6 +455,7 @@ export class Stage {
     this.rim2.intensity = 1.0 * (1 - this.insideK);
     this.scene.environmentIntensity = 0.55 * (1 - this.insideK * 0.85);
 
+    this.updateShadows(vg, this.v.bow);
     this.dustMat.uniforms.uTime.value = time;
     this.final.uniforms.uTime.value = time;
     this.final.uniforms.uDip.value = Math.max(dip, this.extraDip ?? 0);
